@@ -1,0 +1,23 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1583790414497.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "0",
+    "id" : "1440D2F9",
+    "lastKnownWriteTime" : 1583790412,
+    "last_content_update" : 1583790412,
+    "path" : "~/Documents/NU_MSDS/410/assignment_10/model.R",
+    "project_path" : "model.R",
+    "properties" : {
+    },
+    "read_only" : false,
+    "read_only_alternatives" : [
+    ],
+    "relative_order" : 1,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}
