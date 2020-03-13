@@ -6,6 +6,8 @@
 ## purchased), STARS (rated by experts) and the dichotomous variable
 ## Purchase Purchase will be the response variable.
 
+
+
 # Load Libraries -------------
 library(readxl)
 library(data.table)
@@ -20,6 +22,7 @@ library(MASS)
 library(car)
 library(formatR)
 options(scipen=999)
+
 
 
 # Load Data ------------
@@ -42,6 +45,7 @@ summary_func <- function(x) {
     "0 Count" = sum(x == 0, na.rm = TRUE)
   )
 }
+
 
 
 # EDA --------------------------------------------
@@ -73,8 +77,11 @@ ggplot(gather(na.omit(dat)), aes(x=key, y=value)) +
   geom_boxplot() + 
   facet_wrap(~key, scales = 'free')
 
+
+
 # Correlation Prior to Cleaning ---------------------------
 corrplot::corrplot(cor(na.omit(dat)))
+
 
 
 # Data Cleaning -------------------------------------------
@@ -91,6 +98,7 @@ missing_col_dt <- dat[, ..missing_cols]
 dat[, which(unlist(lapply(missing_col_dt, function(x)all(is.na(x))))), with = F]
 
 
+
 # Data Imputation ----------------------------------
 # The missing values may be indicators so NA values are given their own column.
 # Most columns are imputed with the mean.
@@ -103,7 +111,6 @@ dat$STARS[which(is.na(dat$STARS))] <- 0
 dat$ResidualSugar_na <- ifelse(is.na(dat$ResidualSugar), 1, 0)
 dat$ResidualSugar[which(is.na(dat$ResidualSugar))] <- mean(dat$ResidualSugar,
                                                            na.rm = TRUE)
-
 # Chlorides - replace with mean
 dat$Chlorides_na <- ifelse(is.na(dat$Chlorides), 1, 0)
 dat$Chlorides[which(is.na(dat$Chlorides))] <- mean(dat$Chlorides, 
@@ -112,16 +119,19 @@ dat$Chlorides[which(is.na(dat$Chlorides))] <- mean(dat$Chlorides,
 # FreeSulfurDioxide - replace with mean
 dat$FreeSulfurDioxide_na <- ifelse(is.na(dat$FreeSulfurDioxide), 1, 0)
 dat$FreeSulfurDioxide[which(is.na(
-  dat$FreeSulfurDioxide))] <- mean(dat$FreeSulfurDioxide, na.rm = TRUE)
+  dat$FreeSulfurDioxide))] <- mean(dat$FreeSulfurDioxide, 
+                                   na.rm = TRUE)
 
 # TotalSulfurDioxide - replace with mean
 dat$TotalSulfurDioxide_na <- ifelse(is.na(dat$TotalSulfurDioxide), 1, 0)
 dat$TotalSulfurDioxide[which(is.na(
-  dat$TotalSulfurDioxide))] <- mean(dat$TotalSulfurDioxide, na.rm = TRUE)
+  dat$TotalSulfurDioxide))] <- mean(dat$TotalSulfurDioxide, 
+                                    na.rm = TRUE)
 
 # pH - replace with mean
 dat$pH_na <- ifelse(is.na(dat$pH), 1, 0)
-dat$pH[which(is.na(dat$pH))] <- mean(dat$pH, na.rm = TRUE)
+dat$pH[which(is.na(dat$pH))] <- mean(dat$pH, 
+                                     na.rm = TRUE)
 
 # Sulphates - replace with mean
 dat$Sulphates_na <- ifelse(is.na(dat$Sulphates), 1, 0)
@@ -151,7 +161,8 @@ corrplot::corrplot(cor(dat))
 
 # STARS by LabelAppeal reveals higher LabelAppeal indicates higher STARS
 dat[, .(Avg_STARS_by_Label = mean(STARS)), by = LabelAppeal]
-dat$High_Label_and_STARS <- ifelse(dat$STARS > 2 & dat$LabelAppeal == 2, 1, 0) # cor 0.07
+dat$High_Label_and_STARS <- ifelse(
+  dat$STARS > 2 & dat$LabelAppeal == 2, 1, 0) # cor 0.07
 
 # AcidIndex flagged for value higher than 8
 dat[, .(c = mean(AcidIndex)), by = Purchase] # cut off looks to be 8
@@ -162,6 +173,7 @@ dat[, Avg_AcidIndex_by_STARS := mean(AcidIndex), by = STARS] # cor -0.59
 
 # Another look at the corrplot shows the new variables are promising
 corrplot::corrplot(cor(dat))
+
 
 
 # Collinearity Check ---------------------------------
@@ -181,6 +193,7 @@ set.seed(123)
 split_idx <- createDataPartition(dat$Purchase, p = 0.7, list = F)
 train <- dat[split_idx,]
 test <- dat[-split_idx,]
+
 
 
 # Automative Feature Selection and Model ------------------------
@@ -220,6 +233,7 @@ step <-
   )
 step_summ <- summary(step)
 step_vif <- sort(vif(step), decreasing=TRUE)
+
 
 
 # Model Summaries --------------------------
@@ -268,6 +282,7 @@ plot(perf, lwd = 3, main = "Stepwise Model ROC")
 text(0.6, 0.4, round(auc, 3))
 
 
+
 # Adjusting for Model Interpretability ----------
 # More variables are removed to increase interpretability. The final model
 # only uses variables that do not have NA values (except STARS) which avoid
@@ -281,9 +296,10 @@ final_vif <- sort(vif(final), decreasing=TRUE)
 # Results of Final Model
 test_prob_final <- final %>% predict(test, type = "response")
 test_pred_final <- ifelse(test_prob_final > 0.5, 1, 0)
-test_res_final <- table(test$Purchase, test_pred_final, dnn = c("Purchase", "Predict"))
+test_res_final <- table(test$Purchase, test_pred_final,
+                        dnn = c("Purchase", "Predict"))
 
-test_accuracy_final <- sum(diag(test_res_final)) / sum(test_res_final) #  0.8426
+test_accuracy_final <- sum(diag(test_res_final)) / sum(test_res_final) # 0.8426
 
 # The ROC confirms a weak prediction performace
 pred_final <- prediction(as.numeric(test_pred_final), as.numeric(test$Purchase))
@@ -293,7 +309,11 @@ plot(perf_final, lwd = 3, main = "Final Model ROC")
 text(0.6, 0.4, round(auc_final, 3))
 
 
+
 # Concluding Results -------------------
+
+# Coefficient Interpretation
+exp(final$coefficients)
 
 # The final model lowers false positive rate but loses true positive rate.
 # The area under the curve improves by 0.018.
