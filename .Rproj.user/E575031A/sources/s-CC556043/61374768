@@ -1,0 +1,25 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1584049084261.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "0",
+    "id" : "61374768",
+    "lastKnownWriteTime" : 1583020179,
+    "last_content_update" : 1583020179,
+    "path" : "~/Documents/NU_MSDS/410/assignment_8/logreg.r",
+    "project_path" : null,
+    "properties" : {
+        "cursorPosition" : "50,41",
+        "scrollLine" : "44"
+    },
+    "read_only" : false,
+    "read_only_alternatives" : [
+    ],
+    "relative_order" : 3,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}

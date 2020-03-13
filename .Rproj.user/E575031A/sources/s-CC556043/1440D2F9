@@ -7,11 +7,13 @@
     "folds" : "",
     "hash" : "0",
     "id" : "1440D2F9",
-    "lastKnownWriteTime" : 1583790412,
-    "last_content_update" : 1583790412,
+    "lastKnownWriteTime" : 1584131677,
+    "last_content_update" : 1584131677981,
     "path" : "~/Documents/NU_MSDS/410/assignment_10/model.R",
     "project_path" : "model.R",
     "properties" : {
+        "cursorPosition" : "18,13",
+        "scrollLine" : "0"
     },
     "read_only" : false,
     "read_only_alternatives" : [

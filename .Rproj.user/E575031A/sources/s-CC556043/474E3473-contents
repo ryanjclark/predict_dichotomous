@@ -1,0 +1,141 @@
+#Title: SVM Machine Learning in R
+#Author: Mustafa, Asma 
+#Dataset Citation:
+# author = "Dua, Dheeru and Graff, Casey",
+# year = "2017",
+# title = "{UCI} Machine Learning Repository",
+#url = "http://archive.ics.uci.edu/ml",
+#institution = "University of California, Irvine, School of Information and Computer Sciences" }
+# data info. is available at:https://archive.ics.uci.edu/ml/datasets/Breast+Cancer+Wisconsin+(Diagnostic)
+
+#Intro:
+#SVM: support vector machine generates a hyperplane (or group of hyperplanes) that maximize the
+#margin width between two classes. By mapping the non-linear variable to a higher dimension, variable
+#will become more linear allowing svm model to separate data points into two classes
+
+#The Advantage of using SVM that it builds a highly accurate model problem-oriented kernel and uses regularization term to avoid over-fitting. 
+# The main LIMITAION of SVM is its speed and size. (not fit for large size data)
+
+#From R: Recipes for Analysis, Visualization and Machine Learning
+#by Viswa Viswanathan (Author), Shanthi Viswanathan  (Author), Atmajitsinh Gohil (Author), Chiu (David Chiu), Yu-Wei (Author)
+
+###########
+#Packages:#
+###########
+
+library(e1071)
+library(rpart)
+library(xtable)
+library(caret)
+library(ROCR)
+library(kernlab)
+
+#Data Processing and Visualization:
+setwd("/Users/rjc/Documents/R") 
+
+#Reading the dataset for more information about the dataset description, please visit: "http://archive.ics.uci.edu/ml",
+wdbc <- read.csv('WDBC.csv',head=T)
+
+
+#Converting the class label into factor
+wdbc$diagnosis=factor(wdbc$diagnosis)
+
+
+#checking NA values:
+# data description documents stated that there is no NA, but this is a good practice.
+sapply(wdbc, function(x) sum(is.na(x))) 
+
+#Remove the id col. is doesn't contribute to the model predictivity
+wdbc=wdbc[,-1]
+
+#Visualize Highly Correlated Data
+pairs(wdbc[3:7],main="Wisconsin Diagnostic Breast Cancer Data", pch =21, bg=c("red","green","blue"))
+pairs(wdbc[7:11],main="Wisconsin Diagnostic Breast Cancer Data", pch =21, bg=c("red","green","blue"))
+pairs(wdbc[11:15],main="Wisconsin Diagnostic Breast Cancer Data", pch =21, bg=c("red","green","blue"))
+
+#You can also do corrplot: #requires library(corrplot)
+#corrplot(corMatMy, order = "hclust", tl.cex = 0.7) #requires library(corrplot)
+
+wdbc[,3:31]
+# Calculate collinearity
+wdbc_cor <- cor(wdbc[,3:31])
+wdbc_cor
+
+#Finding Highly Correlated columns
+highlyCor <- colnames(wdbc)[findCorrelation(wdbc_cor, cutoff = 0.9, verbose = TRUE)]
+highlyCor
+
+#Removing highly correlated columns (correlation above 0.9, higher mean col) to avoid bias-overffiting:
+wdbc_clean <- wdbc[, which(!colnames(wdbc) %in% highlyCor)]
+
+
+wdbc_clean=cbind(diagnosis=wdbc$diagnosis,wdbc_clean)
+
+
+#Parititioning the data into two sets:Training and Testing:
+
+set.seed(1000)
+t.idx <- createDataPartition(wdbc_clean$diagnosis,list = F) #caret package is needed
+trainset  <- wdbc_clean[t.idx,]
+testset   <- wdbc_clean[-t.idx,]
+
+#YOu can also use: trunc
+# index     <- 1:nrow(wdbc)
+# testindex <- sample(index, trunc(length(index)/3))
+# testset   <- wdbc[testindex,]
+# trainset  <- wdbc[-testindex,-2]
+
+
+
+#TRAINING without gamma cost best parameters:
+svm.model <- svm(trainset$diagnosis ~ ., data = trainset, type='C-classification' )
+Summary_NO_tune=table(trainset$diagnosis, fitted(svm.model), dnn = c("Actual", "Predicted_NoTune"))
+Summary_NO_tune
+#PREDICTING 
+svm.pred  <- predict(svm.model, testset[,-1])
+
+#confusion Matrix for predicting model
+cm_svm.pred_NoTune <- confusionMatrix(svm.pred, testset$diagnosis, positive = "M")
+
+
+
+
+
+
+tuned = tune.svm(diagnosis~ ., data = trainset, gamma = 10^(-6:0),cost=10^(0:2))
+
+
+tuned
+
+
+#TRAINING with gamma, cost parameters selected by the tune.svm function:
+svm.model_tuned <- svm(trainset$diagnosis ~ ., data = trainset, type='C-classification', gamma= 0.01, cost=10,kernel="radial",cross=10 )
+Summary_Tune_mod=table(trainset$diagnosis, fitted(svm.model_tuned), dnn = c("Actual", "Predicted_Tune"))
+Summary_Tune_mod
+
+
+#PREDICTING again!
+svm.pred_tuned  <- predict(svm.model_tuned, testset[,-1])
+
+#confusion Matrix for tuned predicting model
+cm_svm.pred_Tune <- confusionMatrix(svm.pred_tuned, testset$diagnosis, positive = "M")
+cm_svm.pred_Tune
+
+
+compare_Pred_Results=cbind(cm_svm.pred_NoTune$table,cm_svm.pred_Tune$table)
+compare_Pred_Results
+
+
+#### IF Time allows ####
+par(mfrow=c(1,1))
+
+class(svm.pred_tuned)
+pred<-prediction(as.numeric(svm.pred_tuned), as.numeric(testset$diagnosis))
+perf<-performance(pred,"tpr","fpr")
+heatcols <- heat.colors(9)
+heatcols <- rainbow(11)
+plot(perf, colorize = TRUE,colorkey=TRUE,colorize.palette=heatcols,lwd=4)
+
+
+
+

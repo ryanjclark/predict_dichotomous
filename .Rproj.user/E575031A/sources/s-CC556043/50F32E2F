@@ -1,0 +1,25 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1584049114127.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "0",
+    "id" : "50F32E2F",
+    "lastKnownWriteTime" : 1582582387,
+    "last_content_update" : 1582582387,
+    "path" : "~/Documents/NU_MSDS/410/assignment_7/AmesHousingModeling.r",
+    "project_path" : null,
+    "properties" : {
+        "cursorPosition" : "653,0",
+        "scrollLine" : "651"
+    },
+    "read_only" : false,
+    "read_only_alternatives" : [
+    ],
+    "relative_order" : 4,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}

@@ -1,0 +1,25 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1584035482579.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "0",
+    "id" : "474E3473",
+    "lastKnownWriteTime" : 1580858800,
+    "last_content_update" : 1580858800,
+    "path" : "~/Documents/R/SVM.R",
+    "project_path" : null,
+    "properties" : {
+        "cursorPosition" : "136,55",
+        "scrollLine" : "122"
+    },
+    "read_only" : false,
+    "read_only_alternatives" : [
+    ],
+    "relative_order" : 3,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}
