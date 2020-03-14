@@ -237,10 +237,6 @@ step_vif <- sort(vif(step), decreasing=TRUE)
 
 
 # Model Summaries --------------------------
-# All three selection methods resulted in the same VIF and all values are
-# below 6. Multicollinearity is not an issue.
-formattable(round(cbind(forward_vif, backward_vif, step_vif), 2))
-
 # All three selection methods chose the same variables, but backward selection
 # chose different coefficients. The biggest difference is in the STARS_na flag
 # where the process chose a large coefficient for FreeSulfurDioxide in place of
@@ -249,6 +245,10 @@ formattable(round(cbind.data.frame(
   "Forward Selection" = forward$coefficients,
   "Backward Selection" = backward$coefficients,
   "Stepwise Selection" = step$coefficients), 2))
+
+# All three selection methods resulted in the same VIF and all values are
+# below 6. Multicollinearity is not an issue.
+formattable(round(cbind(forward_vif, backward_vif, step_vif), 2))
 
 # All three selection methods have the same AIC and BIC. The BIC is lower
 # expectedly because it penalizes models with more variables.
@@ -268,7 +268,7 @@ train_res <- table(train$Purchase, train_pred, dnn = c("Purchase", "Predict"))
 training_accuracy <- sum(diag(train_res)) / sum(train_res) # 0.8621
 
 # Test accuracy
-test_prob <- step %>% predict(test, type = "response")
+test_prob <- step %>% predict(newdata = test, type = "response")
 test_pred <- ifelse(test_prob > 0.5, 1, 0)
 test_res <- table(test$Purchase, test_pred, dnn = c("Purchase", "Predict"))
 
@@ -294,7 +294,7 @@ final_summ <- summary(final)
 final_vif <- sort(vif(final), decreasing=TRUE)
 
 # Results of Final Model
-test_prob_final <- final %>% predict(test, type = "response")
+test_prob_final <- final %>% predict(newdata = test, type = "response")
 test_pred_final <- ifelse(test_prob_final > 0.5, 1, 0)
 test_res_final <- table(test$Purchase, test_pred_final,
                         dnn = c("Purchase", "Predict"))
@@ -312,12 +312,12 @@ text(0.6, 0.4, round(auc_final, 3))
 
 # Concluding Results -------------------
 
-# Coefficient Interpretation
-exp(final$coefficients)
+# The change in odds of a purchase 
+formattable(round(exp(cbind.data.frame(coef(final), confint(final))), 2))
 
 # The final model lowers false positive rate but loses true positive rate.
 # The area under the curve improves by 0.018.
-par(mfrow=c(1,2))
+par(mfrow = c(1, 2))
 plot(perf_final, lwd = 3, main = "Final Model ROC")
 text(0.6, 0.4, round(auc_final, 3))
 plot(perf, lwd = 3, main = "Stepwise Model ROC")

@@ -1,0 +1,206 @@
+# Poisson and Zero-Inflated Poisson Modeling -----
+library(dplyr)
+library(tidyr)
+library(readr)
+library(ggplot2)
+library(pscl)
+# DATASET -----------------
+# This dataset will be used to model a response variable that is a count
+# of stressful events. There are 651 rows. Four other continuous variables will
+# serve as explanatory variables:
+# COHES: how well the adolescent gets along with family (coded low to high)
+# ESTEEM: self-esteem (coded low to high)
+# GRADEs: past year’s school grades (coded low to high)
+# SATTACH: how well the adolescent likes their school (coded low to high)
+dat <- read.csv('STRESS.csv')
+# EDA ----------------------
+names(dat)
+str(dat)
+head(dat)
+summary(dat)
+glimpse(dat)
+# MISSING DATA -------------
+## There is no missing data in the explanatory variable columns
+colnames(is.na(dat))
+sapply(dat, function(x) sum(is.na(x)))
+# STRESS VARIABLE ----------
+## An integer variable that represents counts of stressful events. This will
+## be the response variable. The histogram shows this is a zero-inflated
+## variable. The QQ Plot shows this does not have a normal distribution.
+## Excluding the spike at 0, the mean and variance is 2.62 and 2.85,
+## respectively. Because these two values are close, the appropriate
+## distribution for this response variable is zero inflated poisson.
+stress_hist <- hist(dat$STRESS, xlab = "Stress",
+                    main = "Stress Variable",
+                    col = "blue",
+                    ylim = c(0, 400)
+                    )
+text(stress_hist$mids, 
+     stress_hist$counts,
+     labels = stress_hist$counts,
+     adj = c(0.5, -0.5)
+     )
+qqnorm(dat$STRESS, main = "Stress Q-Q Plot", pch = 19, col = "blue")
+summary(dat$STRESS) #  all data
+mean(dat$STRESS) #  1.72
+var(dat$STRESS) #  3.419
+summary(dat$STRESS[dat$STRESS > 0]) #  without zero spike
+mean(dat$STRESS[dat$STRESS > 0]) #  2.618
+var(dat$STRESS[dat$STRESS > 0]) # 2.847
+# OLS Regression ------------
+## Use OLS regression because it is quick to fit and interpret. It may offer
+## insight or be a surprisingly good fit. 
+ols1 <- lm(STRESS ~ COHES + ESTEEM + GRADES + SATTACH, data = dat)
+summary(ols1)
+par(mfrow=c(2,2))
+plot(ols1, which = c(1,3,4,5))
+hist(ols1$fitted.values, main = "Histogram of Fitted Values",
+     xlab = "Fitted Values", col = "orange")
+# OLS Regression on Transformed Variable --------
+logSTRESS_var <- ifelse(dat$STRESS == 0, 0.000000001, dat$STRESS) #  Impute 0
+dat$logSTRESS <- log(logSTRESS_var) #  log transform
+ols2 <- lm(logSTRESS ~ COHES + ESTEEM + GRADES + SATTACH, data = dat)
+summary(ols2)
+par(mfrow=c(2,2))
+plot(ols2, which = c(1,2,3,5))
+hist(ols2$fitted.values, main = "Histogram of Fitted Values",
+     xlab = "Fitted Values", col = "orange")
+# POISSON MODELS ------------
+## Fit a classic Poisson that does not account for zero inflation
+pois1 <- glm(STRESS ~ COHES + ESTEEM + GRADES + SATTACH,
+             data = dat,
+             family = "poisson")
+summary(pois1)
+exp(coef(pois1))
+dat$y_hat_poisson <- fitted(pois1)
+hist(dat$y_hat_poisson, main = "Histogram of Fitted Values",
+     xlab = "Fitted Values", col = "orange")
+## Compare goodness of fit from OLS model to Poisson model
+AIC(ols2) #  4857.517
+AIC(pois1) #  2417.219
+## Fit a negative binomial model that can account for overdispersion
+nbr1 <- MASS::glm.nb(STRESS ~ COHES + ESTEEM + GRADES + SATTACH, data = dat)
+summary(nbr1)
+exp(coef(nbr1))
+AIC(nbr1)
+AIC(pois1)
+
+
+
+# COHES PREDICTIONS -------
+## Dive deeper into cohesion variable by splitting the variable into high 
+## and low groups for values 1 standard deviation above and 1 below the mean,
+## respectively. 
+cohes_mean <- mean(dat$COHES) #  53.00426
+cohes_sd <- sd(dat$COHES) #  11.38331
+dat <- dat %>%
+  mutate(COHES_GROUP = case_when(
+    COHES < (cohes_mean - cohes_sd) ~ "Low",
+    between(COHES, cohes_mean - cohes_sd, cohes_mean + cohes_sd) ~ "Middle",
+    COHES > (cohes_mean + cohes_sd) ~ "High"
+  ))
+table(dat$COHES_GROUP)
+## Predicted response variable by COHES group
+dat$y_hat_poisson[dat$COHES_GROUP == "Low"]
+dat$y_hat_poisson[dat$COHES_GROUP == "High"]
+dat %>%
+  group_by(COHES_GROUP) %>%
+  summarize(mean(y_hat_poisson))
+# Deviance Residuals by Predicted Values
+plot(
+  pois1$fitted.values,
+  residuals(pois1, type = "deviance"),
+  main = "Deviance Residuals vs Fitted",
+  xlab = "Fitted Values",
+  ylab = "Deviance Residuals",
+  pch = 19,
+  col = "orange"
+)
+# LOGISTIC REGRESSION -----------
+## Fit STRESS as just an indicator with logistic regression
+dat$Y_IND <- ifelse(dat$STRESS == 0, 0, 1)
+lr1 <- glm(Y_IND ~ COHES + ESTEEM + GRADES + SATTACH, data = dat, family = "binomial")
+summary(lr1)
+exp(coef(lr1))
+
+logit_lr <-
+  (
+    lr1$coefficients[1] +  
+      lr1$coefficients[2] * dat$COHES + 
+      lr1$coefficients[3] * dat$ESTEEM + 
+      lr1$coefficients[4] * dat$GRADES + 
+      lr1$coefficients[5] * dat$SATTACH
+  )
+pi_lr <- exp(logit_lr) / (1 + exp(logit_lr))
+pi_lr_thresh <- ifelse(pi_lr >= 0.5, 1, 0)
+table(dat$Y_IND, pi_lr_thresh, dnn = c("STRESS", "Prediction"))
+AIC(lr1)
+
+## BUCKETIZE ESTEEM
+dat <- dat %>%
+  mutate(ESTEEM_GROUP = case_when(
+    ESTEEM < 30 ~ "Low",
+    ESTEEM >= 30 ~ "High"
+  ))
+table(dat$ESTEEM_GROUP)
+## Predicted response variable by COHES group
+dat$y_hat_poisson[dat$ESTEEM_GROUP == "Low"]
+dat$y_hat_poisson[dat$ESTEEM_GROUP == "High"]
+dat %>%
+  group_by(ESTEEM_GROUP) %>%
+  summarize(pi_lr_thresh)
+# MANUALLY FIT ZIP MODEL -------
+# Create Stress Level Variable
+# Turns 0 into NA
+dat$StressLevel <- ifelse(dat$STRESS == 0, NA, dat$STRESS)
+# Create binary stress variable
+dat$STRESS_binary <- ifelse(dat$STRESS == 0, 0, 1)
+
+# Logistic Regression Model on Dichotomous Stress Variable
+lr9 <- glm(STRESS_binary ~ COHES + ESTEEM + GRADES + SATTACH, data = dat, family = "binomial")
+# Poisson Regression on Stress Level (excludes zeros)
+pois9 <- glm(StressLevel ~ COHES + ESTEEM + GRADES + SATTACH, data = dat, family = "poisson")
+summary(lr9)
+summary(pois9)
+exp(coef(pois9))
+## Combined models
+combined_yhat <- ifelse(pi_lr < 0.5, 0, pois9$fitted.values)
+hist(combined_yhat,
+     main = "Histogram of Predictions (ZIP Model)",
+     xlab = "Predicted Stress",
+     col = "orange")
+## Residual analysis
+resid9 <- dat$STRESS - combined_yhat
+plot(
+  combined_yhat,
+  resid9,
+  main = "Residuals vs Predicted Stress",
+  xlab = "Predicted Stress",
+  ylab = "Residuals",
+  pch = 19,
+  col = "orange"
+)
+## FORMALLY CREATE ZIP MODEL -------
+zip10 <- zeroinfl(STRESS ~ COHES | COHES, family = "poisson", data = dat)
+summary(zip10)
+exp(coef(zip10))
+
+
+# Create better model
+zip11 <- zeroinfl(STRESS ~ COHES + ESTEEM | COHES + ESTEEM + GRADES + SATTACH, data = dat)
+summary(zip11)
+AIC(zip11) #  2291.904
+
+zip12 <- zeroinfl(STRESS ~ COHES + ESTEEM + GRADES + SATTACH | COHES + ESTEEM + GRADES + SATTACH, data = dat)
+summary(zip12)
+AIC(zip12) #  2288.802
+
+zip13 <- zeroinfl(STRESS ~ COHES + ESTEEM + GRADES + SATTACH | COHES + ESTEEM , data = dat)
+summary(zip13)
+AIC(zip13) #  2286.261
+
+zip14 <- zeroinfl(STRESS ~ COHES + ESTEEM + GRADES + SATTACH | COHES , data = dat)
+summary(zip14)
+AIC(zip14) #  2284.279
+
+

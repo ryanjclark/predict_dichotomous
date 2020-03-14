@@ -1,0 +1,603 @@
+#################
+# Load libraries
+################
+library(readr)
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(fastDummies)
+library(olsrr)
+library(lessR)
+library(gridExtra)
+#################
+# Load data
+################
+dat <- read_csv("NutritionStudy.csv")
+
+#################
+# Create functions
+################
+# Enhanced histogram function
+enhanced_hist <- function(x, title_alias) {
+  par(mfrow=c(1, 2))
+  skew <- round(moments::skewness(x), digits = 3)
+  kurtosis <- round(moments::kurtosis(x), digits = 3)
+  
+  #Histogram
+  hist(
+    x = x,
+    main = paste("Histogram of", title_alias),
+    xlab = title_alias,
+    col = "purple"
+  )
+  legend("topright",
+         legend = paste("kurtosis =", kurtosis, "&", "skew =", skew))
+  
+  # Boxplot
+  boxplot(
+    x = x,
+    main = paste("Boxplot of", title_alias),
+    xlab = title_alias,
+    col = "purple",
+    outcol = "red"
+  )
+}
+
+# Omnibus F-test calculation
+omnibus_f <- function(model, alpha = 0.95) {
+  # Calculate F-statistic
+  anova_obj <- anova(model)
+  ssy <- sum(anova_obj$`Sum Sq`)
+  sse_index <- length(anova_obj$`Sum Sq`)
+  sse <- anova_obj$`Sum Sq`[sse_index]
+  k <- sum(anova_obj$Df[-sse_index])
+  n <- sum(anova_obj$Df) + 1
+  num <- (ssy - sse) / k
+  denom <- sse / (n - k - 1)
+  f <- round(num / denom, digits = 4)
+  
+  # Calculate critical F Value
+  crit_f <- round(qf(alpha, k, (n - k - 1)), digits = 4)
+  
+  # Output: Determine if reject the null
+  if (f > crit_f) {
+    print(paste("F-statistic of", f, "is greater than the critical value of", crit_f))
+    print("We can REJECT the null hypothesis")
+  } else {
+    print(paste("F-statistic of", f, "is less than the critical value of", crit_f))
+    print("We FAIL TO REJECT the null hypothesis")
+  }
+}
+
+# Regression Diagnostics
+regression_diagnostics <-
+  function(model,
+           cooks_threshold = 1,
+           leverage_threshold = 2) {
+    # Cooks Distance
+    cooks_dist <- cooks.distance(model)
+    potential_outliers <- cooks_dist[cooks_dist > cooks_threshold]
+    if (length(potential_outliers) == 0) {
+      cooks_outliers <- 0
+    } else {
+      cooks_outliers <- potential_outliers
+    }
+    
+    # Leverage
+    hat_vals <- hatvalues(model)
+    k <- length(model$coefficients) - 1
+    n <- length(model$residuals)
+    hat_outliers <-
+      hat_vals[hat_vals > (2 * sqrt((k + 1) / (n - k)))]
+    if (length(hat_outliers) == 0) {
+      hat_out <- 0
+    } else {
+      hat_out <- hat_outliers
+    }
+    return(list(
+      CooksDistanceOutliers = cooks_outliers,
+      LeverageOutliers = hat_out
+    ))
+  }
+
+reg_diag_print <- function(rd) {
+  if (sum(rd$CooksDistanceOutliers) == 0) {
+    print("There are no outliers based on Cook's distance.")
+  } else {
+    print(paste("There are", length(rd$CooksDistanceOutliers), "potential outliers based on Cook's distance."))
+  }
+  if (sum(rd$LeverageOutliers) == 0) {
+    print("There are no leverage outliers.")
+  } else {
+    print(paste("There are", length(rd$LeverageOutlier), "potential leverage outliers."))
+  }
+}
+
+# LM model plot
+plot_lm_diag <- function(model) {
+  par(mfrow = c(3,2))
+  plot(model, which = c(1,2,3,4,5))
+}
+
+# Function to Perform Partial F-Tests
+partial_f_test <- function(full_mod, partial_mod, alpha = 0.05) {
+  # Add ANOVA objects
+  full_anova <- anova(full_mod)
+  partial_anova <- anova(partial_mod)
+  
+  # Calculate sum of squares
+  full_regression_ss <-
+    sum(full_anova$`Sum Sq`[1:(length(full_anova$`Sum Sq`) - 1)])
+  reduced_regression_ss <-
+    sum(partial_anova$`Sum Sq`[1:(length(partial_anova$`Sum Sq`) - 1)])
+  
+  s <- sum(partial_anova$Df[1:(length(partial_anova$Df) - 1)])
+  df <- full_anova$Df[length(full_anova$Df)]
+  
+  # F-statistic computations
+  full_ms_residual <-
+    full_anova$`Sum Sq`[length(full_anova$`Sum Sq`)] / df
+  numerator <- (full_regression_ss - reduced_regression_ss) / s
+  denominator <- full_ms_residual
+  partial_f <- round(numerator / denominator, digits = 4)
+  
+  # Critical F
+  n <- sum(full_anova$Df) + 1
+  q_p <- sum(full_anova$Df[1:length(full_anova$Df) - 1])
+  df2 <- n - q_p - 1
+  critical_f <- round(qf(1 - alpha, s, df2), digits = 4)
+  
+  # Print based on reject or fail to reject
+  if (partial_f > critical_f) {
+    print(
+      paste(
+        "The F-statistic is",
+        partial_f,
+        "which is greater than the critical value of",
+        critical_f
+      )
+    )
+    print("Therefore we can REJECT the null hypothesis")
+  } else {
+    print(
+      paste(
+        "The F-statistic is",
+        partial_f,
+        "which is less than the critical value of",
+        critical_f
+      )
+    )
+    print("Therefore we FAIL TO REJECT the null hypothesis")
+  }
+}
+
+
+#################
+# Prep for model
+################
+y <- dat$Cholesterol
+fiber <- dat$Fiber
+################
+# Consider FIBER variable
+################
+fiber
+plot(fiber,
+     y,
+     main = "Fiber vs Cholesterol",
+     xlab = "Fiber",
+     ylab = "Cholesterol",
+     col = "orange",
+     pch = 16)
+
+fiber_cor <- cor(fiber, y)
+
+p2 <- dat %>%
+  ggplot(aes(x = fiber, y = y)) +
+  geom_point(col='blue') +
+  ggtitle("Cholesterol vs Fiber") +
+  xlab("Fiber")
+  ylab("Cholesterol") +
+  theme_classic() +
+  theme(legend.position = "bottom") +
+  annotate("text", x = 35, y = 750, label = "Correlation: 0.154")
+
+################
+# Build FIBER model
+################
+fiber_mod <- lm(y ~ fiber, data = dat)
+summary(fiber_mod)
+# \hat{Y}=193.701+3.813X
+# R-squared is tiny
+# 193.7 represents the Cholesterol when fiber intake is zero.
+# For every full point increase in fiber intake, cholesterol
+# will increase by 3.8 but the fiber variable only accounts for
+# 2.3 % of the response variables variation in the model. Even
+# though the t-statistics and p-values confirm the significance
+# of the coefficients, the R-squared is very small so
+# this model does not provide much meaning.
+
+################
+# Build ALCOHOL model
+################
+# Create dummies
+dat <- dat %>%
+  mutate(AlcoholCat = case_when(Alcohol == 0 ~ 'None',
+                                 Alcohol < 10 ~ 'Mod',
+                                 Alcohol >= 10 ~ 'High'))
+
+dat <- dummy_cols(dat, select_columns = "AlcoholCat")
+# Simplify dummy variable names
+alc.none <- dat$AlcoholCat_None
+alc.mod <- dat$AlcoholCat_Mod
+alc.high <- dat$AlcoholCat_High
+
+model_alc <- lm(y ~ fiber + alc.mod + alc.high)
+summary(model_alc)
+# \hat{Y}=189.266+3.984X_1+-2.523X_2+44.429X_3
+anova(model_alc)
+
+# Because 'alcohol none' is the holdout variable, the intercept 
+# 189.27 represents the cholesterol value for no alcohol when all
+# other variables are equal to zero. 
+
+omnibus_f(model_alc)
+plot_lm_diag(model_alc)
+model_alc_rd <- regression_diagnostics(model_alc)
+reg_diag_print(model_alc_rd)
+Plot(Fiber, Cholesterol, by=AlcoholCat, data=dat)
+ols_plot_dffits(model_alc)
+# Cooks D
+ols_plot_cooksd_chart(model_alc)
+cooks.distance(model_alc)
+reg(Cholesterol ~ Fiber + AlcoholCat_Mod + AlcoholCat_High, data=dat)
+# Plot(model_alc)
+# Save predictions
+dat$model_alc_pred <- model_alc$fitted.values
+
+dat %>%
+  ggplot(aes(x = Fiber, y = model_alc_pred, color = AlcoholCat)) +
+  geom_point() +
+  ggtitle("Predicted Cholesterol vs Fiber (Grouped by Alcohol Usage)") +
+  ylab("Predicted Cholesterol") +
+  theme_classic() +
+  theme(legend.position = "bottom")
+
+dat %>%
+  ggplot(aes(x = Fiber, y = Cholesterol, color = AlcoholCat)) +
+  geom_point() +
+  ggtitle("Cholesterol vs Fiber (Grouped by Alcohol Usage)") +
+  theme_classic() +
+  theme(legend.position = "bottom")
+
+################
+# Build ALCOHOL by FIBER model with interaction
+################
+
+dat <- dat %>%
+  mutate(
+    alc.none.fiber = alc.none * fiber,
+    alc.mod.fiber = alc.mod * fiber,
+    alc.high.fiber = alc.high * fiber
+  )
+
+model_fiber_alc <- lm(y ~ fiber + alc.mod + alc.high + alc.mod.fiber + alc.high.fiber, data = dat)
+summary(model_fiber_alc)
+# m3 <- lm(Cholesterol ~ Fiber + AlcLow + AlcHigh + AlcLow_Fiber + AlcHigh_Fiber, data = n_df)
+
+# \hat{Y}=230.3434+0.6363X_1+-62.8481X_2+-63.3814X_3+4.7976X_4+9.0742X_5
+# Fit model
+dat$model_fiber_alc_pred <- model_fiber_alc$fitted.values
+
+dat %>%
+  ggplot(aes(x = fiber, y = model_fiber_alc_pred, color = AlcoholCat)) +
+  geom_point() +
+  ggtitle("Interaction Model Predicted Values") +
+  ylab("Predicted Cholesterol") +
+  theme_classic() +
+  theme(legend.position = "bottom")
+
+omnibus_f(model_fiber_alc)
+plot_lm_diag(model_fiber_alc)
+model_fiber_alc_rd <- regression_diagnostics(model_fiber_alc)
+reg_diag_print(model_fiber_alc_rd)
+
+ols_plot_dffits(model_fiber_alc)
+# Cooks D
+ols_plot_cooksd_chart(model_fiber_alc)
+
+################
+# Nested F-test
+################
+
+partial_f_test(full_mod = model_fiber_alc, partial_mod = model_alc)
+
+################
+# More variables
+################
+# Make dummies
+dat <- dummy_cols(dat, select_columns = c("Smoke", "VitaminUse", "Gender"))
+View(dat)
+names(dat)
+
+# Make interaction
+dat <- dat %>%
+  mutate(
+    Smoke_No_Fiber = Smoke_No * Fiber,
+    Smoke_Yes_Fiber = Smoke_Yes * Fiber,
+    Vitamin_No_Fiber = VitaminUse_No * Fiber,
+    Vitamin_Occ_Fiber = VitaminUse_Occasional * Fiber,
+    Vitamin_Reg_Fiber = VitaminUse_Regular * Fiber,
+    Gender_Male_Fiber = Gender_Male * Fiber,
+    Gender_Female_Fiber = Gender_Female * Fiber
+  )
+
+# Build models
+## Smoke and Fiber
+
+smoke_fiber <- lm(Cholesterol ~ Fiber + Smoke_Yes, data = dat)
+summary(smoke_fiber)
+
+dat$smoke_fiber_pred <- smoke_fiber$fitted.values
+anova(smoke_fiber)
+
+smoke_fiber_int <- lm(Cholesterol ~ Fiber + Smoke_Yes + Smoke_Yes_Fiber, data = dat)
+summary(smoke_fiber_int)
+
+dat$smoke_fiber_int_pred <- smoke_fiber_int$fitted.values
+
+partial_f_test(full_mod = smoke_fiber_int, partial_mod = smoke_fiber)
+
+
+p1 <- ggplot(dat, aes(x = Fiber, y = smoke_fiber_pred, color = Smoke)) +
+  geom_point() +
+  ggtitle("Predicted Cholesterol vs Fiber (Grouped by Smoker)") +
+  theme_classic() +
+  theme(legend.position = "bottom")
+
+p2 <- ggplot(dat, aes(x = Fiber, y = Cholesterol, color = Smoke)) +
+  geom_point() +
+  ggtitle("Cholesterol vs Fiber (Grouped by Smoker)") +
+  theme_classic() +
+  theme(legend.position = "bottom")
+
+p3 <- ggplot(dat, aes(x = fiber, y = smoke_fiber_int_pred, color = Smoke)) +
+  geom_point() +
+  ggtitle("Interaction Model Predicted Values") +
+  ylab("Predicted Cholesterol") +
+  theme_classic() +
+  theme(legend.position = "bottom")
+
+
+## Vitamin and Fiber
+vit_fiber <- lm(Cholesterol ~ Fiber + VitaminUse_Occasional + VitaminUse_Regular, data = dat)
+summary(vit_fiber)
+
+dat$vit_fiber_pred <- vit_fiber$fitted.values
+
+vit_fiber_int <- lm(Cholesterol ~ Fiber + VitaminUse_Occasional + VitaminUse_Regular + 
+                      Vitamin_Occ_Fiber + Vitamin_Reg_Fiber, data = dat)
+summary(vit_fiber_int)
+
+dat$vit_fiber_int_pred <- vit_fiber_int$fitted.values
+
+partial_f_test(full_mod = vit_fiber_int, partial_mod = vit_fiber)
+
+
+
+p4 <- ggplot(dat, aes(x = Fiber, y = Cholesterol, color = VitaminUse)) +
+  geom_point() +
+  ggtitle("Cholesterol vs Fiber (Grouped by VitaminUse)") +
+  theme_classic() +
+  theme(legend.position = "bottom")
+
+p5 <- ggplot(dat, aes(x = Fiber, y = vit_fiber_pred, color = VitaminUse)) +
+  geom_point() +
+  ggtitle("Predicted Cholesterol vs Fiber (Grouped by VitaminUse)") +
+  theme_classic() +
+  theme(legend.position = "bottom")
+
+p6 <- ggplot(dat, aes(x = fiber, y = vit_fiber_int_pred, color = VitaminUse)) +
+  geom_point() +
+  ggtitle("Interaction Model Predicted Values") +
+  ylab("Predicted Cholesterol") +
+  theme_classic() +
+  theme(legend.position = "bottom")
+
+## Gender and Fiber
+
+gen_fiber <- lm(Cholesterol ~ Fiber + Gender_Female, data = dat)
+summary(gen_fiber)
+
+dat$gen_fiber_pred <- gen_fiber$fitted.values
+
+gen_fiber_int <- lm(Cholesterol ~ Fiber + Gender_Female + Gender_Female_Fiber, data = dat)
+summary(gen_fiber_int)
+
+dat$gen_fiber_int_pred <- gen_fiber_int$fitted.values
+
+partial_f_test(full_mod = gen_fiber_int, partial_mod = gen_fiber)
+ols_plot_cooksd_chart(gen_fiber_int)
+ols_plot_dffits(gen_fiber_int)
+plot_lm_diag(gen_fiber_int)
+gen_fiber_int_rd <- regression_diagnostics(gen_fiber_int)
+reg_diag_print(gen_fiber_int)
+
+p7 <- ggplot(dat, aes(x = Fiber, y = Cholesterol, color = Gender)) +
+  geom_point() +
+  ggtitle("Cholesterol vs Fiber (Grouped by Gender)") +
+  theme_classic() +
+  theme(legend.position = "bottom")
+
+p8 <- ggplot(dat, aes(x = Fiber, y = gen_fiber_pred, color = Gender)) +
+  geom_point() +
+  ggtitle("Predicted Cholesterol vs Fiber (Grouped by Gender)") +
+  theme_classic() +
+  theme(legend.position = "bottom")
+
+p9 <- ggplot(dat, aes(x = fiber, y = gen_fiber_int_pred, color = Gender)) +
+  geom_point() +
+  ggtitle("Interaction Model Predicted Values") +
+  ylab("Predicted Cholesterol") +
+  theme_classic() +
+  theme(legend.position = "bottom")
+
+grid.arrange(p2, p1, p3, p4, p5, p6, p7, p8, p9, nrow=3)
+
+View(dat)
+
+library(corrplot)
+dat2 <- dat %>%
+  subset(select=c("Cholesterol", "Quetelet", "Calories", "Fat", "BetaDiet", "RetinolDiet",
+                  "BetaPlasma", "RetinolPlasma", "Fiber"))
+M <- cor(dat2)
+corrplot(M, method = "circle")
+names(dat)
+
+# Fat ANCOVA
+
+dat <- dat %>%
+  mutate(
+    alc.none.fat = alc.none * Fat,
+    alc.mod.fat = alc.mod * Fat,
+    alc.high.fat = alc.high * Fat,
+    Smoke_No_Fat = Smoke_No * Fat,
+    Smoke_Yes_Fat = Smoke_Yes * Fat,
+    Vitamin_No_Fat = VitaminUse_No * Fat,
+    Vitamin_Occ_Fat = VitaminUse_Occasional * Fat,
+    Vitamin_Reg_Fat = VitaminUse_Regular * Fat,
+    Gender_Male_Fat = Gender_Male * Fat,
+    Gender_Female_Fat = Gender_Female * Fat
+  )
+
+# Fat and alcohol
+alc_fat <- lm(Cholesterol ~ Fat + alc.mod + alc.high, data = dat) # reduced
+summary(alc_fat)
+dat$alc_fat_pred <- alc_fat$fitted.values
+alc_fat_int <- lm(Cholesterol ~ Fat + alc.mod + alc.high + 
+                    alc.mod.fat + alc.high.fat, data = dat)
+summary(alc_fat_int)
+dat$alc_fat_int_pred <- alc_fat_int$fitted.values
+partial_f_test(full_mod = alc_fat_int, partial_mod = alc_fat)
+
+# Fat and vitamin use
+vit_fat <- lm(Cholesterol ~ Fat + VitaminUse_Occasional + VitaminUse_Regular, data = dat)
+summary(vit_fat)
+dat$vit_fat_pred <- vit_fat$fitted.values
+vit_fat_int <- lm(Cholesterol ~ Fat + VitaminUse_Occasional + VitaminUse_Regular + 
+                      Vitamin_Occ_Fat + Vitamin_Reg_Fat, data = dat)
+summary(vit_fat_int)
+dat$vit_fat_int_pred <- vit_fat_int$fitted.values
+partial_f_test(full_mod = vit_fat_int, partial_mod = vit_fat)
+
+# Fat and smoking
+smoke_fat <- lm(Cholesterol ~ Fat +  Smoke_Yes, data = dat)
+summary(smoke_fat)
+dat$smoke_fat_pred <- smoke_fat$fitted.values
+smoke_fat_int <- lm(Cholesterol ~ Fat + Smoke_Yes + Smoke_Yes_Fat, data = dat)
+summary(smoke_fat_int)
+dat$smoke_fat_int_pred <- smoke_fat_int$fitted.values
+partial_f_test(full_mod = smoke_fat_int, partial_mod = smoke_fat)
+
+# Fat and gender
+gender_fat <- lm(Cholesterol ~ Fat +  Gender_Female, data = dat)
+summary(gender_fat)
+dat$gender_fat_pred <- gender_fat$fitted.values
+gender_fat_int <- lm(Cholesterol ~ Fat + Gender_Female + Gender_Female_Fat, data = dat)
+summary(gender_fat_int)
+dat$gender_fat_int_pred <- gender_fat_int$fitted.values
+partial_f_test(full_mod = gender_fat_int, partial_mod = gender_fat)
+
+
+
+
+
+p1 <- ggplot(dat, aes(x = Fat, y = Cholesterol, color = AlcoholCat)) +
+  geom_point() +
+  ggtitle("Cholesterol vs Fat (Grouped by Alcohol Category)") +
+  theme_classic() +
+  theme(legend.position = "bottom")
+
+p2 <- ggplot(dat, aes(x = Fat, y = alc_fat_pred, color = AlcoholCat)) +
+  geom_point() +
+  ggtitle("Predicted vs Fat (Grouped by Alcohol Category)") +
+  theme_classic() +
+  theme(legend.position = "bottom")
+
+p3 <- ggplot(dat, aes(x = Fat, y = alc_fat_int_pred, color = AlcoholCat)) +
+  geom_point() +
+  ggtitle("Interaction Model Predicted Values") +
+  ylab("Predicted Cholesterol") +
+  theme_classic() +
+  theme(legend.position = "bottom")
+
+grid.arrange(p1, p2, p3)
+
+
+p1 <- ggplot(dat, aes(x = Fat, y = Cholesterol, color = VitaminUse)) +
+  geom_point() +
+  ggtitle("Cholesterol vs Fat (Grouped by VitaminUse)") +
+  theme_classic() +
+  theme(legend.position = "bottom")
+
+p2 <- ggplot(dat, aes(x = Fat, y = vit_fat_pred, color = VitaminUse)) +
+  geom_point() +
+  ggtitle("Predicted Cholesterol vs Fat (Grouped by VitaminUse)") +
+  theme_classic() +
+  theme(legend.position = "bottom")
+
+p3 <- ggplot(dat, aes(x = Fat, y = vit_fat_int_pred, color = VitaminUse)) +
+  geom_point() +
+  ggtitle("Interaction Model Predicted Values") +
+  ylab("Predicted Cholesterol") +
+  theme_classic() +
+  theme(legend.position = "bottom")
+
+grid.arrange(p1, p2, p3)
+
+
+
+p1 <- ggplot(dat, aes(x = Fat, y = Cholesterol, color = Smoke)) +
+  geom_point() +
+  ggtitle("Cholesterol vs Fat (Grouped by Smoke)") +
+  theme_classic() +
+  theme(legend.position = "bottom")
+
+p2 <- ggplot(dat, aes(x = Fat, y = smoke_fat_pred, color = Smoke)) +
+  geom_point() +
+  ggtitle("Predicted vs Fat (Grouped by Smoke)") +
+  theme_classic() +
+  theme(legend.position = "bottom")
+
+p3 <- ggplot(dat, aes(x = Fat, y = smoke_fat_int_pred, color = Smoke)) +
+  geom_point() +
+  ggtitle("Interaction Model Predicted Values") +
+  ylab("Predicted Cholesterol") +
+  theme_classic() +
+  theme(legend.position = "bottom")
+
+grid.arrange(p1, p2, p3)
+
+
+p1 <- ggplot(dat, aes(x = Fat, y = Cholesterol, color = Gender)) +
+  geom_point() +
+  ggtitle("Cholesterol vs Fat (Grouped by Gender)") +
+  theme_classic() +
+  theme(legend.position = "bottom")
+
+p2 <- ggplot(dat, aes(x = Fat, y = gender_fat_pred, color = Gender)) +
+  geom_point() +
+  ggtitle("Predicted Cholesterol vs Fat (Grouped by Gender)") +
+  theme_classic() +
+  theme(legend.position = "bottom")
+
+p3 <- ggplot(dat, aes(x = Fat, y = gender_fat_int_pred, color = Gender)) +
+  geom_point() +
+  ggtitle("Interaction Model Predicted Values") +
+  ylab("Predicted Cholesterol") +
+  theme_classic() +
+  theme(legend.position = "bottom")
+
+grid.arrange(p1, p2, p3)
+
+
+
