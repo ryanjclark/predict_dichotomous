@@ -5,15 +5,15 @@
     "dirty" : false,
     "encoding" : "UTF-8",
     "folds" : "",
-    "hash" : "0",
+    "hash" : "3609090966",
     "id" : "1440D2F9",
-    "lastKnownWriteTime" : 1584150910,
-    "last_content_update" : 1584150910404,
+    "lastKnownWriteTime" : 1584152209,
+    "last_content_update" : 1584152209039,
     "path" : "~/Documents/NU_MSDS/410/assignment_10/model.R",
     "project_path" : "model.R",
     "properties" : {
-        "cursorPosition" : "319,15",
-        "scrollLine" : "309"
+        "cursorPosition" : "324,0",
+        "scrollLine" : "316"
     },
     "read_only" : false,
     "read_only_alternatives" : [

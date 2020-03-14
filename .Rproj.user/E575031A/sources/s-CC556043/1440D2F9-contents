@@ -13,6 +13,7 @@ library(readxl)
 library(data.table)
 library(tidyr)
 library(purrr)
+library(broom)
 library(ggplot2)
 library(fastDummies)
 library(formattable)
@@ -310,6 +311,19 @@ text(0.6, 0.4, round(auc_final, 3))
 
 
 
+# Influential Points ------------------------------
+
+# There are no concerning influential points. The three highest Cook's D are
+# small values. 
+plot(final, which = 4)
+
+model.data <- augment(model) %>% 
+  mutate(index = 1:n()) 
+resid <- model.data %>% 
+  top_n(3, .cooksd)
+resid$.cooksd
+
+
 # Concluding Results -------------------
 
 # The change in odds of a purchase 
@@ -347,3 +361,4 @@ res <- cbind.data.frame(
                           max(vif(final))),
                         3))
 formattable(res)
+
