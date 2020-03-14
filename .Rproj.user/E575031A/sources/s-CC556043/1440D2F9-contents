@@ -324,7 +324,7 @@ resid <- model.data %>%
 resid$.cooksd
 
 
-# Concluding Results -------------------
+# Interpretation, Accuracy, ROC AUC -------------------
 
 # The change in odds of a purchase 
 formattable(round(exp(cbind.data.frame(coef(final), confint(final))), 2))
