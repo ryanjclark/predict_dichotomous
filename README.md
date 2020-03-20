@@ -1,5 +1,5 @@
 # Wine Sales Prediction Model
-This R script illustrates a full modeling project where a data set is taken without any domain knowledge. The findings of the prediction model would lead to recommendations to lower the acidity in wine to increase sales and investigate why non-rated wine is purchased at a higher rate. 
+This R script illustrates a full modeling project where a data set is taken without any domain knowledge. From this analysis, I can recommend that lower  acidity in wine will increase sales and request further investigation as to why wine withoua star-rating is more popular than wine with a rating.
 
 ## Code Sections
 - EDA
